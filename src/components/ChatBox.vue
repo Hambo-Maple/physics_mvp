@@ -1,5 +1,10 @@
 <template>
   <div class="chatbox-container">
+    <!-- Toast 提示 -->
+    <div v-if="toastMessage" :class="['toast', toastType]">
+      {{ toastMessage }}
+    </div>
+
     <!-- 标题栏 -->
     <div class="chatbox-header">
       物理可视化助手
@@ -25,12 +30,21 @@
         v-model="inputValue"
         placeholder="输入消息..."
         @keydown.enter.prevent="sendMessage"
-        :disabled="state.isGenerating"
+        :disabled="state.isGenerating || voiceState !== 'idle'"
       ></textarea>
-      <button class="btn btn-voice" @click="startVoiceRecognition" :disabled="state.isGenerating">
-        {{ isRecording ? '正在识别...' : '语音输入' }}
+      <button
+        class="btn btn-voice"
+        :class="{
+          'recording': voiceState === 'recording',
+          'recognizing': voiceState === 'recognizing',
+          'loading': voiceState === 'recording' || voiceState === 'recognizing'
+        }"
+        @click="startVoiceRecognition"
+        :disabled="state.isGenerating || voiceState === 'recognizing'"
+      >
+        {{ voiceState === 'recording' ? '正在录音...' : voiceState === 'recognizing' ? '正在识别...' : '语音输入' }}
       </button>
-      <button class="btn btn-primary btn-send" @click="sendMessage" :disabled="state.isGenerating">
+      <button class="btn btn-primary btn-send" @click="sendMessage" :disabled="state.isGenerating || voiceState !== 'idle'">
         发送
       </button>
     </div>
@@ -38,19 +52,106 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, onMounted } from 'vue';
 import state, { addMessage, updateVisualType, setGenerating, updateMessageContent } from '../store';
 import { parseTriggerFromReply } from '../utils/zhipuClient';
 import { renderMathToHTML } from '../utils/katex';
 import { formatPhysicsAnswer } from '../utils/textFormatter';
 import { createStreamRequest } from '../utils/streamHandler';
+import {
+  checkMediaRecorderSupport,
+  startRecording,
+  stopRecording,
+  blobToBase64,
+  getAudioFormat,
+  recognizeVoice
+} from '../utils/voice';
 import '../assets/ChatBox.css';
 
 // 输入框绑定值
 const inputValue = ref('');
 
 // 语音识别状态
+const voiceState = ref('idle'); // 'idle' | 'recording' | 'recognizing'
 const isRecording = ref(false);
+
+// Toast 提示状态
+const toastMessage = ref('');
+const toastType = ref('success'); // 'success' | 'error'
+let toastTimer = null;
+
+/**
+ * 显示 Toast 提示
+ * @param {string} message - 提示消息
+ * @param {string} type - 提示类型（success/error）
+ */
+const showToast = (message, type = 'success') => {
+  toastMessage.value = message;
+  toastType.value = type;
+
+  // 清除之前的定时器
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+  }
+
+  // 3 秒后自动消失
+  toastTimer = setTimeout(() => {
+    toastMessage.value = '';
+  }, 3000);
+};
+
+/**
+ * 语音输入按钮点击事件
+ * 第一次点击：开始录音
+ * 第二次点击：停止录音并识别
+ */
+const startVoiceRecognition = async () => {
+  // 空闲状态：开始录音
+  if (voiceState.value === 'idle') {
+    try {
+      await startRecording();
+      voiceState.value = 'recording';
+      isRecording.value = true;
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  }
+  // 录音中：停止录音并识别
+  else if (voiceState.value === 'recording') {
+    try {
+      voiceState.value = 'recognizing';
+      isRecording.value = false;
+
+      // 停止录音
+      const audioBlob = await stopRecording();
+
+      // 转换为 Base64
+      const audioBase64 = await blobToBase64(audioBlob);
+      const format = getAudioFormat(audioBlob);
+
+      // 调用识别接口
+      const text = await recognizeVoice(audioBase64, format);
+
+      // 识别成功：填充输入框并自动发送
+      inputValue.value = text;
+      voiceState.value = 'idle';
+
+      // 自动发送消息
+      await sendMessage();
+
+    } catch (error) {
+      voiceState.value = 'idle';
+      showToast(error.message, 'error');
+    }
+  }
+};
+
+// 组件挂载时检查浏览器支持
+onMounted(() => {
+  if (!checkMediaRecorderSupport()) {
+    showToast('您的浏览器不支持语音输入', 'error');
+  }
+});
 
 // 消息流容器引用
 const messagesRef = ref(null);
@@ -171,31 +272,6 @@ const sendMessage = async () => {
       scrollToBottom();
     }
   );
-};
-
-/**
- * 语音输入功能（预留接口）
- * TODO: Integrate Baidu Voice SDK
- *
- * 百度语音识别接入说明：
- * 1. 引入百度语音 Web SDK（需先申请 AppKey/SecretKey）
- * 2. 调用 SDK 录制音频并转换为文字
- * 3. 将识别结果赋值给 inputValue（输入框绑定的变量）
- * 4. 识别完成后重置按钮状态为"语音输入"
- */
-const startVoiceRecognition = () => {
-  // 切换录音状态
-  isRecording.value = !isRecording.value;
-
-  // TODO: 实际集成时，在此处调用百度语音 SDK
-  // 示例伪代码：
-  // if (isRecording.value) {
-  //   baiduVoiceSDK.startRecording();
-  // } else {
-  //   const result = baiduVoiceSDK.stopRecording();
-  //   inputValue.value = result.text;
-  //   isRecording.value = false;
-  // }
 };
 
 /**

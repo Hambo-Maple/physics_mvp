@@ -2,6 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import ZhipuAI from 'zhipuai-sdk-nodejs-v4';
 import dotenv from 'dotenv';
+import ffmpeg from 'fluent-ffmpeg';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 加载环境变量
 dotenv.config();
@@ -9,9 +16,54 @@ dotenv.config();
 const app = express();
 const PORT = 3001;
 
+// 创建临时文件目录
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir);
+}
+
+/**
+ * 将 webm 音频转换为 wav 格式
+ * @param {Buffer} webmBuffer - webm 音频数据
+ * @returns {Promise<Buffer>} - wav 音频数据
+ */
+function convertWebmToWav(webmBuffer) {
+  return new Promise((resolve, reject) => {
+    const inputPath = path.join(tempDir, `input-${Date.now()}.webm`);
+    const outputPath = path.join(tempDir, `output-${Date.now()}.wav`);
+
+    // 写入临时文件
+    fs.writeFileSync(inputPath, webmBuffer);
+
+    // 使用 ffmpeg 转换
+    ffmpeg(inputPath)
+      .toFormat('wav')
+      .audioFrequency(16000) // 设置采样率为 16000Hz
+      .audioChannels(1)      // 单声道
+      .on('end', () => {
+        // 读取转换后的文件
+        const wavBuffer = fs.readFileSync(outputPath);
+
+        // 删除临时文件
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(outputPath);
+
+        resolve(wavBuffer);
+      })
+      .on('error', (err) => {
+        // 清理临时文件
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+
+        reject(err);
+      })
+      .save(outputPath);
+  });
+}
+
 // 中间件
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // 增加请求体大小限制，支持音频数据
 
 // 系统提示词
 const SYSTEM_PROMPT = `你是一位专业的物理教学助手，擅长用通俗易懂的语言解释物理概念和公式。
@@ -129,6 +181,107 @@ app.post('/api/chat', async (req, res) => {
 
       res.status(500).json({ error: 'AI 服务暂时不可用，请稍后再试' });
     }
+  }
+});
+
+// 百度语音识别接口
+// 配置说明：
+// 1. 在百度智能云控制台（https://console.bce.baidu.com/）创建语音识别应用
+// 2. 获取 AppID、API Key、Secret Key
+// 3. 在 .env 文件中配置：
+//    BAIDU_APP_ID=你的AppID
+//    BAIDU_API_KEY=你的API_Key
+//    BAIDU_SECRET_KEY=你的Secret_Key
+app.post('/api/voice/recognize', async (req, res) => {
+  try {
+    const { audio, format } = req.body;
+
+    // 验证参数
+    if (!audio || !format) {
+      return res.status(400).json({ error: '缺少音频数据或格式参数' });
+    }
+
+    // 验证百度 API 配置
+    const appId = process.env.BAIDU_APP_ID;
+    const apiKey = process.env.BAIDU_API_KEY;
+    const secretKey = process.env.BAIDU_SECRET_KEY;
+
+    if (!appId || !apiKey || !secretKey) {
+      console.error('百度 API 配置缺失');
+      return res.status(500).json({ error: '语音识别服务未配置' });
+    }
+
+    // 步骤 1: 获取 Access Token
+    const tokenResponse = await fetch(
+      `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${apiKey}&client_secret=${secretKey}`,
+      { method: 'POST' }
+    );
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.access_token) {
+      console.error('获取百度 Access Token 失败:', tokenData);
+      return res.status(500).json({ error: '语音识别服务初始化失败' });
+    }
+
+    const accessToken = tokenData.access_token;
+
+    // 步骤 2: 转换音频格式（webm → wav）
+    console.log('开始转换音频格式...');
+    const audioBuffer = Buffer.from(audio, 'base64');
+
+    let wavBuffer;
+    if (format === 'webm' || format.includes('webm')) {
+      try {
+        wavBuffer = await convertWebmToWav(audioBuffer);
+        console.log('音频转换成功，WAV 大小:', wavBuffer.length);
+      } catch (error) {
+        console.error('音频转换失败:', error);
+        return res.status(500).json({ error: '音频格式转换失败' });
+      }
+    } else {
+      wavBuffer = audioBuffer;
+    }
+
+    // 步骤 3: 调用百度语音识别 API
+    const params = new URLSearchParams({
+      format: 'wav',
+      rate: 16000,
+      channel: 1,
+      cuid: appId,
+      token: accessToken,
+      dev_pid: 1537,
+      len: wavBuffer.length
+    });
+
+    console.log('发送百度 API 请求，格式: wav, 大小:', wavBuffer.length);
+
+    const recognizeResponse = await fetch(
+      `https://vop.baidu.com/server_api?${params.toString()}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'audio/wav; rate=16000'
+        },
+        body: wavBuffer
+      }
+    );
+
+    const recognizeData = await recognizeResponse.json();
+    console.log('百度 API 响应:', recognizeData);
+
+    // 步骤 4: 解析识别结果
+    if (recognizeData.err_no === 0 && recognizeData.result && recognizeData.result.length > 0) {
+      const text = recognizeData.result[0];
+      console.log('语音识别成功:', text);
+      res.json({ text });
+    } else {
+      console.error('百度语音识别失败:', recognizeData);
+      res.status(500).json({ error: recognizeData.err_msg || '识别失败，请稍后重试' });
+    }
+
+  } catch (error) {
+    console.error('语音识别接口错误:', error);
+    res.status(500).json({ error: '识别失败，请稍后重试' });
   }
 });
 

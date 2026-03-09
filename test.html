@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>诊断页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .status {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>诊断页面</h1>
+    <div class="status">
+        <h2>基础测试</h2>
+        <p id="test1" class="error">测试中...</p>
+    </div>
+
+    <script type="module">
+        document.getElementById('test1').textContent = '✓ JavaScript 正常运行';
+        document.getElementById('test1').className = 'success';
+
+        console.log('诊断：JavaScript 加载成功');
+
+        // 测试 Vue 导入
+        try {
+            const vue = await import('vue');
+            console.log('✓ Vue 导入成功', vue);
+
+            const status = document.createElement('div');
+            status.className = 'status';
+            status.innerHTML = '<h2>Vue 测试</h2><p class="success">✓ Vue 3 导入成功</p>';
+            document.body.appendChild(status);
+        } catch (error) {
+            console.error('✗ Vue 导入失败:', error);
+            const status = document.createElement('div');
+            status.className = 'status';
+            status.innerHTML = '<h2>Vue 测试</h2><p class="error">✗ Vue 导入失败: ' + error.message + '</p>';
+            document.body.appendChild(status);
+        }
+
+        // 测试环境变量
+        const apiKey = import.meta.env.VITE_ZHIPU_API_KEY;
+        const envStatus = document.createElement('div');
+        envStatus.className = 'status';
+        if (apiKey) {
+            envStatus.innerHTML = '<h2>环境变量</h2><p class="success">✓ API Key 已配置 (长度: ' + apiKey.length + ')</p>';
+            console.log('✓ API Key 已配置');
+        } else {
+            envStatus.innerHTML = '<h2>环境变量</h2><p class="error">✗ API Key 未配置</p>';
+            console.error('✗ API Key 未配置');
+        }
+        document.body.appendChild(envStatus);
+    </script>
+</body>
+</html>

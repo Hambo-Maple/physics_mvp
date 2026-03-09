@@ -1,0 +1,1 @@
+{"name":"physics-visualization-mvp","private":true,"version":"0.0.0","type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"cors":"^2.8.6","dotenv":"^17.3.1","express":"^5.2.1","vue":"^3.4.0","zhipuai-sdk-nodejs-v4":"^0.1.12"},"devDependencies":{"@vitejs/plugin-vue":"^5.0.0","vite":"^5.0.0"}}

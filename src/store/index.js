@@ -6,7 +6,15 @@ const state = reactive({
   currentVisualType: '',  // 当前可视化类型：'' | 'PROJECTILE' | 'FORMULA'
   currentFormulaIndex: 0, // 当前显示的公式索引
   isGenerating: false,    // 是否正在流式输出
-  currentMessageId: null  // 当前正在输出的消息 ID
+  currentMessageId: null, // 当前正在输出的消息 ID
+  projectileParams: {     // 平抛运动参数
+    v0: 10,               // 初速度 (m/s)
+    g: 9.8,               // 重力加速度 (m/s²)
+    h: 50,                // 初始高度 (m)
+    theta: 0,             // 发射角度 (度)
+    mass: 1,              // 质量 (kg)
+    timeScale: 1          // 倍速
+  }
 });
 
 // 公式列表：平抛运动的微积分公式
@@ -77,6 +85,14 @@ export const updateMessageContent = (id, content) => {
   } else {
     console.warn(`消息 ID ${id} 不存在`);
   }
+};
+
+/**
+ * 更新平抛运动参数
+ * @param {Object} params - 参数对象
+ */
+export const updateProjectileParams = (params) => {
+  Object.assign(state.projectileParams, params);
 };
 
 // 导出状态对象

@@ -1,32 +1,44 @@
 <template>
   <div class="visual-container">
-    <!-- 顶部状态栏 -->
-    <div class="visual-status">
-      {{ statusText }}
-    </div>
+    <!-- 平抛运动可视化 -->
+    <ProjectileMotion
+      v-if="state.currentVisualType === 'PROJECTILE'"
+      :initialV0="state.projectileParams.v0"
+      :initialG="state.projectileParams.g"
+      :initialH="state.projectileParams.h"
+      :initialTheta="state.projectileParams.theta"
+    />
 
-    <!-- 中心画布区域 -->
-    <div class="visual-canvas">
-      <div id="canvas-mount-point">
-        <p class="canvas-placeholder">{{ placeholderText }}</p>
-        <!-- 公式渲染容器 -->
-        <div id="formula-container" ref="formulaContainerRef"></div>
+    <!-- 原有可视化区域 -->
+    <template v-else>
+      <!-- 顶部状态栏 -->
+      <div class="visual-status">
+        {{ statusText }}
       </div>
-    </div>
 
-    <!-- 底部控制区 -->
-    <div class="visual-controls">
-      <button class="btn btn-primary btn-reset" @click="resetCanvas">
-        重置画布
-      </button>
-      <button
-        v-if="state.currentVisualType === 'FORMULA' || state.currentVisualType === 'PROJECTILE'"
-        class="btn btn-primary"
-        @click="switchFormula"
-      >
-        切换公式
-      </button>
-    </div>
+      <!-- 中心画布区域 -->
+      <div class="visual-canvas">
+        <div id="canvas-mount-point">
+          <p class="canvas-placeholder">{{ placeholderText }}</p>
+          <!-- 公式渲染容器 -->
+          <div id="formula-container" ref="formulaContainerRef"></div>
+        </div>
+      </div>
+
+      <!-- 底部控制区 -->
+      <div class="visual-controls">
+        <button class="btn btn-primary btn-reset" @click="resetCanvas">
+          重置画布
+        </button>
+        <button
+          v-if="state.currentVisualType === 'FORMULA'"
+          class="btn btn-primary"
+          @click="switchFormula"
+        >
+          切换公式
+        </button>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -34,6 +46,7 @@
 import { ref, nextTick } from 'vue';
 import state, { updateVisualType, nextFormula, formulaList } from '../store';
 import { renderMathInElement } from '../utils/katex';
+import ProjectileMotion from './ProjectileMotion.vue';
 import '../assets/VisualCanvas.css';
 
 // 状态栏文字
@@ -75,24 +88,7 @@ const renderFormula = (formulaContent) => {
 const updateCanvas = (type) => {
   if (type === 'PROJECTILE') {
     statusText.value = '当前模式 - 平抛运动';
-    placeholderText.value = '平抛运动画布已准备就绪';
-
-    // 渲染平抛运动的位移积分公式
-    const formula = '$y = \\int_0^t (\\int_0^t g dt) dt = \\frac{1}{2} g t^2$';
-    renderFormula(formula);
-
-    // TODO: 集成 p5.js 渲染平抛运动动画
-    // 示例伪代码：
-    // const sketch = (p) => {
-    //   p.setup = () => {
-    //     p.createCanvas(800, 600);
-    //   };
-    //   p.draw = () => {
-    //     // 绘制平抛运动轨迹
-    //   };
-    // };
-    // new p5(sketch, 'canvas-mount-point');
-
+    // ProjectileMotion 组件会自动渲染
   } else if (type === 'FORMULA') {
     statusText.value = '当前模式 - 物理公式';
     placeholderText.value = '物理公式画布已准备就绪';

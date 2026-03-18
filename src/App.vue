@@ -2,7 +2,7 @@
   <div class="app-container">
     <!-- 左侧：对话区域 (30%) -->
     <div class="chat-section">
-      <ChatBox />
+      <ChatBox :visualCanvasRef="visualCanvasRef" />
     </div>
 
     <!-- 右侧：可视化区域 (70%) -->

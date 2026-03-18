@@ -1,0 +1,18 @@
+[dotenv@17.3.1] injecting env (4) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+
+🚀 智谱 AI 代理服务器已启动
+   地址: http://localhost:3001
+   前端请求此服务器来调用智谱 AI
+
+开始转换音频格式...
+音频转换失败: Error: Cannot find ffmpeg
+    at /mnt/d/physics_visualization_mvp/node_modules/fluent-ffmpeg/lib/processor.js:134:22
+    at /mnt/d/physics_visualization_mvp/node_modules/fluent-ffmpeg/lib/capabilities.js:123:9
+    at /mnt/d/physics_visualization_mvp/node_modules/fluent-ffmpeg/lib/capabilities.js:116:11
+    at /mnt/d/physics_visualization_mvp/node_modules/fluent-ffmpeg/lib/utils.js:223:16
+    at F (/mnt/d/physics_visualization_mvp/node_modules/which/which.js:68:16)
+    at E (/mnt/d/physics_visualization_mvp/node_modules/which/which.js:80:29)
+    at /mnt/d/physics_visualization_mvp/node_modules/which/which.js:89:16
+    at /mnt/d/physics_visualization_mvp/node_modules/isexe/index.js:42:5
+    at /mnt/d/physics_visualization_mvp/node_modules/isexe/mode.js:8:5
+    at FSReqCallback.oncomplete (node:fs:198:21)

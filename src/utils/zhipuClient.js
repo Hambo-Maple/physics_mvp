@@ -52,17 +52,14 @@ export const callZhipuAI = async (userInput, messageHistory) => {
  * @returns {Object} - { content: 显示内容, trigger: 触发类型 }
  */
 export const parseTriggerFromReply = (reply) => {
-  // 使用正则表达式匹配触发标记
-  const triggerMatch = reply.match(/\[TRIGGER:(PROJECTILE|FORMULA)\]/);
+  // 使用正则表达式匹配触发标记（只支持 PROJECTILE）
+  const triggerMatch = reply.match(/\[TRIGGER:PROJECTILE\]/);
 
   if (triggerMatch) {
-    // 提取触发类型
-    const trigger = triggerMatch[1];
-
     // 移除触发标记，得到显示内容
-    const content = reply.replace(/\[TRIGGER:(PROJECTILE|FORMULA)\]/, '').trim();
+    const content = reply.replace(/\[TRIGGER:PROJECTILE\]/, '').trim();
 
-    return { content, trigger };
+    return { content, trigger: 'PROJECTILE' };
   }
 
   // 没有触发标记，返回原始内容

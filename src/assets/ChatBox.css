@@ -92,7 +92,7 @@
 
 /* 文本输入框 */
 .chatbox-input textarea {
-  width: 70%;
+  width: 55%;
   height: 100%;
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -236,3 +236,53 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* 连续语音状态栏 */
+.continuous-status-bar {
+  height: 32px;
+  background: var(--color-primary);
+  color: var(--color-bg-white);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.continuous-status-text {
+  flex: 1;
+}
+
+/* 连续语音按钮样式 */
+.btn-continuous {
+  width: 15%;
+  height: 100%;
+}
+
+.btn-continuous.active {
+  background: var(--color-primary);
+  color: var(--color-bg-white);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 麦克风波形动画 */
+.waveform-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.waveform-bar {
+  width: 4px;
+  background: var(--color-bg-white);
+  border-radius: 2px;
+  transition: height 0.1s ease;
+}
+

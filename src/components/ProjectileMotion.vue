@@ -977,36 +977,30 @@ const sketch = (p) => {
 };
 
 /**
- * 切换播放/暂停
+ * 切换播放/暂停（供外部调用）
  */
 function togglePlayPause() {
   animationState.isPlaying = !animationState.isPlaying;
 }
 
 /**
- * 重置动画
+ * 重置动画（供外部调用）
  */
 function resetAnimation() {
   animationState.isPlaying = false;
   animationState.currentTime = 0;
   animationState.pathPoints = [];
-  params.v0 = 10;
-  params.g = 9.8;
-  params.h = 50;
-  params.theta = 0;
-  params.timeScale = 1;
-  recalculateKeyPoints();
 }
 
 /**
- * 设置倍速
+ * 设置倍速（供外部调用）
  */
 function setTimeScale(speed) {
   params.timeScale = speed;
 }
 
 /**
- * 单步前进
+ * 单步前进（供外部调用）
  */
 function stepForward() {
   if (!animationState.isPlaying) {
@@ -1021,6 +1015,14 @@ function stepForward() {
     }
   }
 }
+
+// 导出动画控制函数供 ChatBox 调用
+defineExpose({
+  togglePlayPause,
+  resetAnimation,
+  setTimeScale,
+  stepForward
+});
 
 /**
  * 切换坐标轴显示/隐藏
@@ -1079,15 +1081,49 @@ watch(formulaContent, () => {
   });
 }, { immediate: true });
 
-// 监听参数变化
-watch(() => [params.v0, params.g, params.h, params.theta], () => {
+// 监听 store 中的参数变化（从对话框同步到组件）
+watch(() => state.projectileParams, (newParams) => {
+  // 同步到本地 params
+  params.v0 = newParams.v0;
+  params.g = newParams.g;
+  params.h = newParams.h;
+  params.theta = newParams.theta;
+  params.mass = newParams.mass;
+  params.timeScale = newParams.timeScale;
+
+  // 重置动画
   if (animationState.isPlaying) {
     animationState.isPlaying = false;
-    animationState.currentTime = 0;
-    animationState.pathPoints = [];
   }
+  animationState.currentTime = 0;
+  animationState.pathPoints = [];
+
+  // 重新计算关键点
   recalculateKeyPoints();
-  updateProjectileParams(params);
+
+  // 清除吸附状态（避免显示过期数据）
+  clearAdsorptionState();
+}, { deep: true });
+
+// 监听本地参数变化（从滑块/输入框同步到 store）
+watch(() => [params.v0, params.g, params.h, params.theta], () => {
+  // 同步到 store
+  updateProjectileParams({
+    v0: params.v0,
+    g: params.g,
+    h: params.h,
+    theta: params.theta
+  });
+
+  // 重置动画
+  if (animationState.isPlaying) {
+    animationState.isPlaying = false;
+  }
+  animationState.currentTime = 0;
+  animationState.pathPoints = [];
+
+  // 重新计算关键点
+  recalculateKeyPoints();
 
   // 清除吸附状态（避免显示过期数据）
   clearAdsorptionState();

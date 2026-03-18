@@ -70,20 +70,30 @@ const SYSTEM_PROMPT = `你是一位专业的物理教学助手，擅长用通俗
 
 你的职责：
 1. 回答用户关于物理的问题，提供准确、清晰的解释
-2. 当用户询问特定物理场景时，在回复末尾添加触发标记来启动可视化
+2. 当用户首次询问平抛运动时，在回复末尾添加触发标记来启动可视化
 
 触发标记规范：
-- 当用户询问平抛运动相关内容时，在回复末尾添加 [TRIGGER:PROJECTILE]
-- 当用户询问物理公式相关内容时，在回复末尾添加 [TRIGGER:FORMULA]
+- 仅当用户首次询问平抛运动相关内容时，在回复末尾添加 [TRIGGER:PROJECTILE]
+- 如果用户正在调整参数、控制动画（播放、暂停、调速等），不要添加任何触发标记
+- 如果用户询问的是其他物理概念或公式，不要添加任何触发标记
 - 触发标记必须放在回复的最后一行
 - 一次回复只能包含一个触发标记
 
-示例：
+示例 1（首次询问平抛运动）：
 用户："什么是平抛运动？"
 你的回复："平抛运动是指物体以一定的初速度水平抛出，仅在重力作用下的运动。它的轨迹是抛物线，水平方向做匀速直线运动，竖直方向做自由落体运动。[TRIGGER:PROJECTILE]"
 
+示例 2（参数调整，不添加触发标记）：
+用户："把初速度调到 20"
+你的回复："好的，已将初速度调整为 20 m/s。"
+
+示例 3（询问其他物理概念，不添加触发标记）：
+用户："什么是牛顿第二定律？"
+你的回复："牛顿第二定律表明，物体的加速度与所受合外力成正比，与质量成反比，公式为 F = ma。"
+
 注意：
-- 不是所有问题都需要触发可视化，只在明确涉及平抛运动或公式展示时才添加标记
+- 只在用户首次询问平抛运动时才添加 [TRIGGER:PROJECTILE]
+- 参数调整、动画控制等操作不需要触发标记
 - 保持回复简洁专业，适合学生理解
 - 回复长度控制在200字以内`;
 
@@ -128,18 +138,32 @@ app.post('/api/chat', async (req, res) => {
     });
 
     // 逐块读取并转发
+    let buffer = ''; // 用于累积不完整的数据块
+
     for await (const chunk of stream) {
       // 智谱 AI 返回的是 Buffer，需要转换为字符串
       const chunkStr = chunk.toString('utf-8');
 
-      // 解析 SSE 格式：data: {...}
-      const lines = chunkStr.split('\n');
+      // 将新数据追加到缓冲区
+      buffer += chunkStr;
+
+      // 按行分割（SSE 格式以 \n\n 分隔消息）
+      const lines = buffer.split('\n');
+
+      // 保留最后一个不完整的行
+      buffer = lines.pop() || '';
+
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const dataStr = line.slice(6).trim();
 
           // 跳过 [DONE] 标记
           if (dataStr === '[DONE]') {
+            continue;
+          }
+
+          // 跳过空数据
+          if (!dataStr) {
             continue;
           }
 
@@ -151,7 +175,29 @@ app.post('/api/chat', async (req, res) => {
               res.write(`data: ${JSON.stringify({ delta, done: false })}\n\n`);
             }
           } catch (e) {
-            console.error('解析数据块失败:', e);
+            // 静默忽略解析错误（可能是不完整的数据块）
+            // 不完整的数据会在下一次循环中与新数据合并后重新解析
+          }
+        }
+      }
+    }
+
+    // 处理缓冲区中剩余的数据
+    if (buffer.trim()) {
+      const lines = buffer.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6).trim();
+          if (dataStr && dataStr !== '[DONE]') {
+            try {
+              const data = JSON.parse(dataStr);
+              const delta = data.choices?.[0]?.delta?.content || '';
+              if (delta) {
+                res.write(`data: ${JSON.stringify({ delta, done: false })}\n\n`);
+              }
+            } catch (e) {
+              // 忽略最后的解析错误
+            }
           }
         }
       }

@@ -3,6 +3,7 @@ import { reactive } from 'vue';
 // 全局状态对象
 const state = reactive({
   messageList: [],        // 对话列表，每条格式：{ id, role, content, time }
+  conversationHistory: [], // 历史对话列表，每条格式：{ id, title, preview, time, messages, visualType, projectileParams }
   currentVisualType: '',  // 当前可视化类型：'' | 'PROJECTILE'
   isGenerating: false,    // 是否正在流式输出
   currentMessageId: null, // 当前正在输出的消息 ID
@@ -16,7 +17,10 @@ const state = reactive({
   },
   // 连续语音模式状态
   isContinuousMode: false,      // 是否开启连续语音模式
-  continuousVoiceState: 'idle'  // 连续语音状态：'idle' | 'listening' | 'recording' | 'recognizing' | 'waiting_ai'
+  continuousVoiceState: 'idle', // 连续语音状态：'idle' | 'listening' | 'recording' | 'recognizing' | 'waiting_ai'
+  // AI 指令派发（用数字序号作触发器，与 projectileParams 同一可靠机制）
+  canvasCommandSeq: 0,          // 每次有新指令时递增，ProjectileMotion 监听此数字
+  canvasCommandBatch: []        // 当前批次的指令列表
 });
 
 /**
@@ -107,6 +111,71 @@ export const setContinuousMode = (value) => {
  */
 export const updateContinuousVoiceState = (status) => {
   state.continuousVoiceState = status;
+};
+
+/**
+ * 派发画布控制指令（和 updateProjectileParams 同一可靠模式）
+ * @param {Array} commands - 指令数组，每条格式 { type, key?, value }
+ */
+export const dispatchCanvasCommands = (commands) => {
+  state.canvasCommandBatch = commands;
+  state.canvasCommandSeq++;  // 递增数字 → 触发 ProjectileMotion 的 watch
+};
+
+/**
+ * 保存当前对话到历史记录
+ * 仅在有消息时保存
+ */
+export const saveCurrentConversation = () => {
+  if (state.messageList.length === 0) return;
+  // 取第一条用户消息作为标题和预览
+  const firstUserMsg = state.messageList.find(m => m.role === 'user');
+  const title = firstUserMsg ? firstUserMsg.content.slice(0, 15) : '新对话';
+  const preview = firstUserMsg ? firstUserMsg.content.slice(0, 30) : '';
+  const now = new Date();
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  state.conversationHistory.unshift({
+    id: Date.now(),
+    title,
+    preview,
+    time,
+    messages: JSON.parse(JSON.stringify(state.messageList)),
+    visualType: state.currentVisualType,
+    projectileParams: { ...state.projectileParams }
+  });
+};
+
+/**
+ * 加载历史对话（恢复消息列表、可视化类型、参数）
+ * @param {Number} id - 历史对话 ID
+ */
+export const loadConversation = (id) => {
+  const conv = state.conversationHistory.find(c => c.id === id);
+  if (!conv) return;
+  state.messageList = JSON.parse(JSON.stringify(conv.messages));
+  state.currentVisualType = conv.visualType;
+  Object.assign(state.projectileParams, conv.projectileParams);
+};
+
+/**
+ * 删除历史对话
+ * @param {Number} id - 历史对话 ID
+ */
+export const deleteConversation = (id) => {
+  const index = state.conversationHistory.findIndex(c => c.id === id);
+  if (index !== -1) state.conversationHistory.splice(index, 1);
+};
+
+/**
+ * 新建对话：保存当前对话，清空状态
+ */
+export const createNewConversation = () => {
+  saveCurrentConversation();
+  state.messageList = [];
+  state.currentVisualType = '';
+  Object.assign(state.projectileParams, DEFAULT_PROJECTILE_PARAMS);
+  state.isGenerating = false;
+  state.currentMessageId = null;
 };
 
 // 导出状态对象

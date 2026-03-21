@@ -59,7 +59,11 @@ export const COMMAND_TYPES = {
   PLAY: 'play',                        // 播放动画
   PAUSE: 'pause',                      // 暂停动画
   SPEED: 'speed',                      // 调整倍速
-  STEP: 'step'                         // 单步前进
+  STEP: 'step',                        // 单步前进
+  ENV: 'env',                          // 切换环境（earth/moon/mars/custom）
+  ENV_OPT: 'env_opt',                  // 环境选项（空气阻力）
+  VIZ_TOGGLE: 'viz_toggle',            // 可视化开关（坐标轴/网格/频闪/矢量/自动缩放）
+  CANVAS_ACTION: 'canvas_action'       // 画布操作（保存轨迹/重置缩放/重置动画）
 };
 
 /**
@@ -96,6 +100,40 @@ export function parseProjectileParams(message) {
     type: null,
     raw: message
   };
+
+  // 0. 环境切换（优先检测，避免"月球重力"等被误识别为参数）
+  const envMode = parseEnvironment(message);
+  if (envMode) {
+    result.type = COMMAND_TYPES.ENV;
+    result.envValue = envMode;
+    return result;
+  }
+
+  // 0b. 环境选项（空气阻力开关）
+  const envOpt = parseEnvOption(message);
+  if (envOpt) {
+    result.type = COMMAND_TYPES.ENV_OPT;
+    result.envOptKey = envOpt.key;
+    result.envOptValue = envOpt.value;
+    return result;
+  }
+
+  // 0c. 可视化开关（坐标轴/网格/频闪/矢量/自动缩放）
+  const vizToggle = parseVizToggle(message);
+  if (vizToggle) {
+    result.type = COMMAND_TYPES.VIZ_TOGGLE;
+    result.vizKey = vizToggle.key;
+    result.vizValue = vizToggle.value;
+    return result;
+  }
+
+  // 0d. 画布操作（保存轨迹/重置缩放/重置动画）
+  const canvasAction = parseCanvasAction(message);
+  if (canvasAction) {
+    result.type = COMMAND_TYPES.CANVAS_ACTION;
+    result.actionValue = canvasAction;
+    return result;
+  }
 
   // 1. 检测重置指令
   if (/重置|恢复默认|初始化|还原/.test(message) && /参数|平抛/.test(message)) {
@@ -526,4 +564,83 @@ export function formatRangeQueryResponse(queryParams) {
   }
 
   return '平抛运动模拟中没有该参数，支持的参数有：初速度、重力加速度、初始高度、发射角度、质量。';
+}
+
+/**
+ * 解析环境切换指令
+ * 要求明确的切换动词，避免"月球上的重力"等问句误触发
+ */
+function parseEnvironment(message) {
+  const switchVerb = /切换到|换到|改成|变成|模拟|在.*上/;
+  if (switchVerb.test(message) && /月球|moon/i.test(message)) return 'moon';
+  if (switchVerb.test(message) && /火星|mars/i.test(message)) return 'mars';
+  if (switchVerb.test(message) && /地球|earth/i.test(message)) return 'earth';
+  if (/月球.*(环境|模式)/.test(message)) return 'moon';
+  if (/火星.*(环境|模式)/.test(message)) return 'mars';
+  if (/地球.*(环境|模式)/.test(message)) return 'earth';
+  if (/(切换到|换到|改成|自定义).*(自定义|custom)/i.test(message) || /自定义.*(环境|模式)/.test(message)) return 'custom';
+  return null;
+}
+
+/**
+ * 解析环境选项（空气阻力开关）
+ */
+function parseEnvOption(message) {
+  if (/空气阻力|阻力系数/.test(message)) {
+    // 检测阻力系数数值设置，如"阻力系数0.3"、"阻力系数设为0.5"
+    const numMatch = message.match(/(\d+\.?\d*)/);
+    if (numMatch && /系数|k值/.test(message)) {
+      const v = parseFloat(numMatch[1]);
+      if (!isNaN(v)) return { key: 'drag', value: v };
+    }
+    if (/打开|开启|开|加|添加|启用/.test(message)) return { key: 'air', value: true };
+    if (/关闭|关|取消|移除|禁用|去掉/.test(message)) return { key: 'air', value: false };
+  }
+  return null;
+}
+
+/**
+ * 解析可视化开关指令
+ */
+function parseVizToggle(message) {
+  const on = /打开|开启|显示|恢复|开/;
+  const off = /隐藏|关闭|取消|关/;
+
+  if (/坐标轴/.test(message)) {
+    if (off.test(message)) return { key: 'axis', value: false };
+    if (on.test(message)) return { key: 'axis', value: true };
+  }
+  if (/网格/.test(message)) {
+    if (on.test(message)) return { key: 'grid', value: true };
+    if (off.test(message)) return { key: 'grid', value: false };
+  }
+  if (/频闪/.test(message)) {
+    // 检测间隔帧数，如"频闪间隔20帧"、"频闪间隔设为30"
+    const numMatch = message.match(/(\d+)/);
+    if (numMatch && /间隔|帧/.test(message)) {
+      const v = parseInt(numMatch[1]);
+      if (!isNaN(v)) return { key: 'strobe-interval', value: v };
+    }
+    if (on.test(message)) return { key: 'strobe', value: true };
+    if (off.test(message)) return { key: 'strobe', value: false };
+  }
+  if (/矢量|速度矢量|速度向量/.test(message)) {
+    if (on.test(message)) return { key: 'vector', value: true };
+    if (off.test(message)) return { key: 'vector', value: false };
+  }
+  if (/自动缩放|自动比例/.test(message)) {
+    if (on.test(message)) return { key: 'autoscale', value: true };
+    if (off.test(message)) return { key: 'autoscale', value: false };
+  }
+  return null;
+}
+
+/**
+ * 解析画布操作指令
+ */
+function parseCanvasAction(message) {
+  if (/保存轨迹|保存当前轨迹|保存路径/.test(message)) return 'save';
+  if (/重置缩放|重置视图|恢复缩放|恢复视图/.test(message)) return 'reset-zoom';
+  if (/重置动画|重置播放|动画重置/.test(message)) return 'reset';
+  return null;
 }

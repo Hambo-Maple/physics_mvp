@@ -47,21 +47,69 @@ export const callZhipuAI = async (userInput, messageHistory) => {
 };
 
 /**
- * 解析 AI 回复中的触发标记
+ * 解析 AI 回复中的所有控制标记
  * @param {String} reply - AI 的原始回复内容
- * @returns {Object} - { content: 显示内容, trigger: 触发类型 }
+ * @returns {Object} - { content: 显示内容, commands: 指令数组 }
+ *
+ * 支持的标记格式：
+ *   [TRIGGER:PROJECTILE]     触发可视化
+ *   [SET:v0=20]              修改物理参数（v0/g/h/theta/mass）
+ *   [ENV:moon]               切换环境（earth/moon/mars/custom）
+ *   [ANIM:play|pause|reset]  控制动画
+ *   [VIZ:strobe=on|off]      可视化选项（strobe/vector）
  */
-export const parseTriggerFromReply = (reply) => {
-  // 使用正则表达式匹配触发标记（只支持 PROJECTILE）
-  const triggerMatch = reply.match(/\[TRIGGER:PROJECTILE\]/);
+export const parseCommandsFromReply = (reply) => {
+  const commands = [];
+  let content = reply;
 
-  if (triggerMatch) {
-    // 移除触发标记，得到显示内容
-    const content = reply.replace(/\[TRIGGER:PROJECTILE\]/, '').trim();
-
-    return { content, trigger: 'PROJECTILE' };
+  // TRIGGER:PROJECTILE
+  if (content.includes('[TRIGGER:PROJECTILE]')) {
+    commands.push({ type: 'TRIGGER', value: 'PROJECTILE' });
+    content = content.replace(/\[TRIGGER:PROJECTILE\]/g, '');
   }
 
-  // 没有触发标记，返回原始内容
-  return { content: reply, trigger: null };
+  // SET 参数：[SET:key=value]
+  const setRegex = /\[SET:(\w+)=([\d.]+)\]/g;
+  let m;
+  while ((m = setRegex.exec(reply)) !== null) {
+    commands.push({ type: 'SET', key: m[1], value: parseFloat(m[2]) });
+    content = content.replace(m[0], '');
+  }
+
+  // ENV 二元选项：[ENV:key=on|off]（如空气阻力 [ENV:air=on]）
+  const envOptRegex = /\[ENV:(\w+)=(on|off)\]/g;
+  while ((m = envOptRegex.exec(reply)) !== null) {
+    commands.push({ type: 'ENV_OPT', key: m[1], value: m[2] === 'on' });
+    content = content.replace(m[0], '');
+  }
+
+  // ENV 环境切换：[ENV:mode]
+  const envMatch = content.match(/\[ENV:(\w+)\]/);
+  if (envMatch) {
+    commands.push({ type: 'ENV', value: envMatch[1] });
+    content = content.replace(envMatch[0], '');
+  }
+
+  // ANIM 动画控制：[ANIM:action]
+  const animMatch = content.match(/\[ANIM:(play|pause|reset|reset-zoom|save)\]/);
+  if (animMatch) {
+    commands.push({ type: 'ANIM', value: animMatch[1] });
+    content = content.replace(animMatch[0], '');
+  }
+
+  // VIZ 可视化选项：[VIZ:key=on|off]
+  const vizRegex = /\[VIZ:(\w+)=(on|off)\]/g;
+  while ((m = vizRegex.exec(reply)) !== null) {
+    commands.push({ type: 'VIZ', key: m[1], value: m[2] === 'on' });
+    content = content.replace(m[0], '');
+  }
+
+  return { content: content.trim(), commands };
+};
+
+// 保留旧接口兼容
+export const parseTriggerFromReply = (reply) => {
+  const { content, commands } = parseCommandsFromReply(reply);
+  const trigger = commands.find(c => c.type === 'TRIGGER')?.value ?? null;
+  return { content, trigger };
 };

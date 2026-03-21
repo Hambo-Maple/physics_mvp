@@ -116,6 +116,93 @@ export function calculatePeakPoint(v0, g, h, theta) {
 }
 
 /**
+ * 计算能量值（动能、势能、机械能）
+ *
+ * 公式：
+ * - 动能：Ek = ½mv²
+ * - 势能：Ep = mgh
+ * - 机械能：E = Ek + Ep
+ *
+ * @param {number} mass - 质量 (kg)
+ * @param {number} velocity - 速度 (m/s)
+ * @param {number} height - 高度 (m)
+ * @param {number} g - 重力加速度 (m/s²)
+ * @returns {{Ek: number, Ep: number, E: number}} 能量值 (J)
+ */
+export function calculateEnergy(mass, velocity, height, g) {
+  const Ek = 0.5 * mass * velocity * velocity;
+  const Ep = mass * g * height;
+  const E = Ek + Ep;
+  return { Ek, Ep, E };
+}
+
+/**
+ * 计算带空气阻力的轨迹（数值积分方法）
+ *
+ * 使用欧拉法进行数值积分，考虑空气阻力：F_drag = -k * v
+ * 运动方程：
+ * - a_x = -(k * v_x) / m
+ * - a_y = -g - (k * v_y) / m
+ *
+ * @param {number} v0 - 初速度 (m/s)
+ * @param {number} g - 重力加速度 (m/s²)
+ * @param {number} h - 初始高度 (m)
+ * @param {number} theta - 发射角度 (度)
+ * @param {number} mass - 质量 (kg)
+ * @param {number} dragK - 阻力系数
+ * @param {number} dt - 时间步长 (s)，默认 0.01
+ * @param {number} maxTime - 最大计算时间 (s)，默认 100
+ * @returns {{points: Array, landingTime: number}} 轨迹点数组和落地时间
+ */
+export function calculateTrajectoryWithDrag(v0, g, h, theta, mass, dragK, dt = 0.01, maxTime = 100) {
+  const thetaRad = (theta * Math.PI) / 180;
+
+  // 初始状态
+  let x = 0;
+  let y = h;
+  let vx = v0 * Math.cos(thetaRad);
+  let vy = v0 * Math.sin(thetaRad);
+  let t = 0;
+
+  const points = [{ x, y, t, vx, vy }];
+
+  // 数值积分直到落地或达到最大时间
+  while (y > 0 && t < maxTime) {
+    // 计算加速度
+    const ax = -(dragK * vx) / mass;
+    const ay = -g - (dragK * vy) / mass;
+
+    // 更新速度
+    vx += ax * dt;
+    vy += ay * dt;
+
+    // 更新位置
+    x += vx * dt;
+    y += vy * dt;
+    t += dt;
+
+    // 保存轨迹点
+    points.push({ x, y, t, vx, vy });
+
+    // 如果落地，修正到精确落地点
+    if (y < 0) {
+      const prevPoint = points[points.length - 2];
+      const ratio = (0 - prevPoint.y) / (y - prevPoint.y);
+      x = prevPoint.x + (x - prevPoint.x) * ratio;
+      y = 0;
+      t = prevPoint.t + (t - prevPoint.t) * ratio;
+      points[points.length - 1] = { x, y, t, vx, vy };
+      break;
+    }
+  }
+
+  return {
+    points,
+    landingTime: t
+  };
+}
+
+/**
  * 参数校验
  *
  * @param {Object} params - 参数对象

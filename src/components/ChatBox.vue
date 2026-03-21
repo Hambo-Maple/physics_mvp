@@ -1,81 +1,129 @@
 <template>
-  <div class="chatbox-container">
+  <div class="flex flex-col h-full bg-background">
     <!-- Toast 提示 -->
-    <div v-if="toastMessage" :class="['toast', toastType]">
+    <div
+      v-if="toastMessage"
+      :class="[
+        'fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-white shadow-lg transition-opacity',
+        toastType === 'success' ? 'bg-primary' : 'bg-destructive'
+      ]"
+    >
       {{ toastMessage }}
     </div>
 
     <!-- 标题栏 -->
-    <div class="chatbox-header">
-      物理可视化助手
+    <div class="p-4 border-b border-border glass flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="bg-gradient-to-br from-blue-100 to-indigo-100 w-10 h-10 rounded-xl flex items-center justify-center">
+          <MessageSquare class="w-5 h-5 text-blue-600" />
+        </div>
+        <h1 class="text-lg font-medium">物理可视化助手</h1>
+      </div>
+      <div class="flex items-center gap-1">
+        <button
+          @click="onClose"
+          class="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+          title="关闭对话框"
+        >
+          <X class="w-4 h-4" />
+        </button>
+      </div>
     </div>
 
     <!-- 连续语音状态栏 -->
-    <div v-if="state.isContinuousMode" class="continuous-status-bar">
-      <span class="continuous-status-text">{{ continuousStatusText }}</span>
-      <div class="waveform-container">
+    <div v-if="state.isContinuousMode" class="px-4 py-2 bg-muted border-b border-border flex items-center gap-3">
+      <span class="text-sm text-muted-foreground">{{ continuousStatusText }}</span>
+      <div class="flex items-center gap-1">
         <div
           v-for="i in 5"
           :key="i"
-          class="waveform-bar"
+          class="w-1 bg-primary rounded-full transition-all"
           :style="{ height: waveformHeights[i - 1] + 'px' }"
         ></div>
       </div>
     </div>
 
     <!-- 消息流区域 -->
-    <div class="chatbox-messages" ref="messagesRef">
-      <div
-        v-for="message in state.messageList"
-        :key="message.id"
-        :class="['message-item', message.role]"
-      >
-        <div class="message-bubble" v-html="message.content"></div>
-        <!-- 流式输出光标 -->
-        <span v-if="state.isGenerating && state.currentMessageId === message.id" class="typing-cursor"></span>
-        <div class="message-time">{{ message.time }}</div>
+    <ScrollArea class="flex-1 p-4">
+      <div ref="messagesRef" class="space-y-4">
+        <div
+          v-for="message in state.messageList"
+          :key="message.id"
+          :class="[
+            'flex flex-col',
+            message.role === 'user' ? 'items-end' : 'items-start'
+          ]"
+        >
+          <div
+            :class="[
+              'max-w-[80%] rounded-2xl px-4 py-3 chat-message',
+              message.role === 'user'
+                ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                : 'bg-gray-50 text-gray-800 border border-gray-100'
+            ]"
+            v-html="message.content"
+          ></div>
+          <!-- 流式输出光标 -->
+          <span
+            v-if="state.isGenerating && state.currentMessageId === message.id"
+            class="inline-block w-2 h-4 ml-1 bg-foreground animate-pulse"
+          ></span>
+          <div class="text-xs text-muted-foreground mt-1">{{ message.time }}</div>
+        </div>
       </div>
-    </div>
+    </ScrollArea>
 
     <!-- 输入区域 -->
-    <div class="chatbox-input">
-      <textarea
-        v-model="inputValue"
-        placeholder="输入消息..."
-        @keydown.enter.prevent="sendMessage"
-        :disabled="state.isGenerating || voiceState !== 'idle' || state.isContinuousMode"
-      ></textarea>
-      <button
-        class="btn btn-voice"
-        :class="{
-          'recording': voiceState === 'recording',
-          'recognizing': voiceState === 'recognizing',
-          'loading': voiceState === 'recording' || voiceState === 'recognizing'
-        }"
-        @click="startVoiceRecognition"
-        :disabled="state.isGenerating || voiceState === 'recognizing' || state.isContinuousMode"
-      >
-        {{ voiceState === 'recording' ? '正在录音...' : voiceState === 'recognizing' ? '正在识别...' : '语音输入' }}
-      </button>
-      <button
-        class="btn btn-continuous"
-        :class="{ 'active': state.isContinuousMode }"
-        @click="toggleContinuousMode"
-        :disabled="state.isGenerating || voiceState !== 'idle'"
-      >
-        {{ state.isContinuousMode ? '停止连续' : '连续对话' }}
-      </button>
-      <button class="btn btn-primary btn-send" @click="sendMessage" :disabled="state.isGenerating || voiceState !== 'idle' || state.isContinuousMode">
-        发送
-      </button>
+    <div class="p-4 border-t border-border glass">
+      <div class="flex flex-col gap-2">
+        <Textarea
+          v-model="inputValue"
+          placeholder="输入消息..."
+          @keydown.enter.prevent="sendMessage"
+          :disabled="state.isGenerating || voiceState !== 'idle' || state.isContinuousMode"
+          class="rounded-xl border-gray-200 focus:border-blue-300 min-h-[80px] resize-none"
+        />
+        <div class="flex gap-2">
+          <Button
+            variant="outline"
+            @click="startVoiceRecognition"
+            :disabled="state.isGenerating || voiceState === 'recognizing' || state.isContinuousMode"
+            class="flex-1 rounded-xl border-gray-200 hover:bg-gray-50"
+          >
+            <Badge
+              v-if="voiceState !== 'idle'"
+              :variant="voiceState === 'recording' ? 'default' : 'secondary'"
+              class="mr-2"
+            >
+              {{ voiceState === 'recording' ? '录音中' : '识别中' }}
+            </Badge>
+            {{ voiceState === 'recording' ? '正在录音...' : voiceState === 'recognizing' ? '正在识别...' : '语音输入' }}
+          </Button>
+          <Button
+            variant="outline"
+            @click="toggleContinuousMode"
+            :disabled="state.isGenerating || voiceState !== 'idle'"
+            :class="{ 'bg-accent': state.isContinuousMode }"
+          >
+            {{ state.isContinuousMode ? '停止连续' : '连续对话' }}
+          </Button>
+          <Button
+            @click="sendMessage"
+            :disabled="state.isGenerating || voiceState !== 'idle' || state.isContinuousMode"
+            class="rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
+          >
+            发送
+          </Button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, nextTick, onMounted, watch, computed, onUnmounted } from 'vue';
-import state, { addMessage, updateVisualType, setGenerating, updateMessageContent, updateProjectileParams, resetProjectileParams, setContinuousMode, updateContinuousVoiceState } from '../store';
-import { parseTriggerFromReply } from '../utils/zhipuClient';
+import state, { addMessage, updateVisualType, setGenerating, updateMessageContent, updateProjectileParams, resetProjectileParams, setContinuousMode, updateContinuousVoiceState, dispatchCanvasCommands } from '../store';
+import { parseCommandsFromReply } from '../utils/zhipuClient';
 import { renderMathToHTML } from '../utils/katex';
 import { formatPhysicsAnswer } from '../utils/textFormatter';
 import { createStreamRequest } from '../utils/streamHandler';
@@ -99,13 +147,29 @@ import {
   formatRangeQueryResponse,
   COMMAND_TYPES
 } from '../utils/paramParser';
-import '../assets/ChatBox.css';
+import Button from './ui/Button.vue';
+import Textarea from './ui/Textarea.vue';
+import Badge from './ui/Badge.vue';
+import ScrollArea from './ui/ScrollArea.vue';
+import { MessageSquare, Minimize2, Maximize2, X } from 'lucide-vue-next';
 
-// Props - 接收 visualCanvasRef
+// Props - 接收 visualCanvasRef 及面板控制回调
 const props = defineProps({
   visualCanvasRef: {
     type: Object,
     default: null
+  },
+  onToggleCanvas: {
+    type: Function,
+    default: () => {}
+  },
+  isCanvasOpen: {
+    type: Boolean,
+    default: true
+  },
+  onClose: {
+    type: Function,
+    default: () => {}
   }
 });
 
@@ -265,6 +329,34 @@ const sendMessage = async () => {
       props.visualCanvasRef.projectileMotionRef.stepForward();
       confirmationText = '已单步前进。';
     }
+  } else if (parseResult.type === COMMAND_TYPES.ENV) {
+    // 切换环境
+    const envNames = { moon: '月球', mars: '火星', earth: '地球', custom: '自定义' };
+    dispatchCanvasCommands([{ type: 'ENV', value: parseResult.envValue }]);
+    confirmationText = `已切换到${envNames[parseResult.envValue] || parseResult.envValue}环境。`;
+  } else if (parseResult.type === COMMAND_TYPES.ENV_OPT) {
+    // 环境选项（如空气阻力开关、阻力系数）
+    dispatchCanvasCommands([{ type: 'ENV_OPT', key: parseResult.envOptKey, value: parseResult.envOptValue }]);
+    if (parseResult.envOptKey === 'drag') {
+      confirmationText = `已将阻力系数设为 **${parseResult.envOptValue}**，并开启空气阻力（自定义模式）。`;
+    } else {
+      const optNames = { air: '空气阻力' };
+      confirmationText = `已${parseResult.envOptValue ? '开启' : '关闭'}${optNames[parseResult.envOptKey] || parseResult.envOptKey}。`;
+    }
+  } else if (parseResult.type === COMMAND_TYPES.VIZ_TOGGLE) {
+    // 可视化显示开关
+    dispatchCanvasCommands([{ type: 'VIZ', key: parseResult.vizKey, value: parseResult.vizValue }]);
+    if (parseResult.vizKey === 'strobe-interval') {
+      confirmationText = `已将频闪间隔设为 **${parseResult.vizValue}** 帧。`;
+    } else {
+      const vizNames = { axis: '坐标轴', grid: '网格线', vector: '速度矢量', strobe: '频闪效果', autoscale: '自动缩放' };
+      confirmationText = `已${parseResult.vizValue ? '开启' : '关闭'}${vizNames[parseResult.vizKey] || parseResult.vizKey}显示。`;
+    }
+  } else if (parseResult.type === COMMAND_TYPES.CANVAS_ACTION) {
+    // 画布操作（保存轨迹、重置缩放等）
+    dispatchCanvasCommands([{ type: 'ANIM', value: parseResult.actionValue }]);
+    const actionNames = { save: '保存轨迹', 'reset-zoom': '重置缩放', reset: '重置动画' };
+    confirmationText = `已执行${actionNames[parseResult.actionValue] || parseResult.actionValue}操作。`;
   }
 
   // ========== 步骤 2: 生成用户消息 ==========
@@ -338,8 +430,8 @@ const sendMessage = async () => {
     (completeText) => {
       console.log('流式输出完成，完整文本:', completeText);
 
-      // 解析触发标记
-      const { content: displayContent, trigger } = parseTriggerFromReply(completeText);
+      // 解析所有控制标记
+      const { content: displayContent, commands } = parseCommandsFromReply(completeText);
 
       // 应用格式化和公式渲染
       const formattedContent = formatPhysicsAnswer(displayContent);
@@ -360,9 +452,19 @@ const sendMessage = async () => {
       // 滚动到底部
       scrollToBottom();
 
-      // 如果有触发标记，更新可视化类型
-      if (trigger) {
-        updateVisualType(trigger);
+      // 执行控制指令（和 SET 命令走同一 store 机制，保证可靠触达）
+      const otherCmds = [];
+      for (const cmd of commands) {
+        if (cmd.type === 'TRIGGER') {
+          updateVisualType(cmd.value);
+        } else if (cmd.type === 'SET') {
+          updateProjectileParams({ [cmd.key]: cmd.value });
+        } else {
+          otherCmds.push(cmd);
+        }
+      }
+      if (otherCmds.length > 0) {
+        dispatchCanvasCommands(otherCmds);
       }
     },
     // onError: 错误处理
